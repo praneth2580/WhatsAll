@@ -4,6 +4,8 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 import threading
 import re
 from time import sleep
@@ -38,6 +40,8 @@ class Whatsapp():
     QR_CHANGE_LISTENER = None
     STATUS_LISTENER = None
 
+    WHATSAPP_SENDER_URL = 'https://web.whatsapp.com/send/?phone=<phone-no>&text=<msg>&type=phone_number&app_absent=0'
+
     # CONFIG VARIABLES 
     WHATSAPP_ELEMENTS_XPATH = {
         'SEARCH_BAR': '//*[@id="side"]/div[1]/div/div[2]/div[2]/div/div/p',
@@ -48,14 +52,11 @@ class Whatsapp():
     }
     SLEEP_SECONDS = {
         'NO_MSG': 5,
-        'SENDER_SEARCH': 1,
-        'SENDER_CLICK': 1,
+        'AFTER_SENDER_SEARCH': 1,
+        'AFTER_SENDER_CLICKED': 1,
         'NEXT_ACTION': 2,
         'MSG_TYPE': 1
     }
-
-    COOKIES = [{'domain': '.web.whatsapp.com', 'expiry': 1730378577, 'httpOnly': False, 'name': 'wa_web_lang_pref', 'path': '/', 'sameSite': 'Lax', 'secure': True, 'value': 'en_GB'}, {'domain': '.web.whatsapp.com', 'expiry': 1735735290, 'httpOnly': True, 'name': 'wa_ul', 'path': 
-        '/', 'sameSite': 'None', 'secure': True, 'value': 'e73d5f3c-d471-4ad3-a9c0-f44811777748'}]
 
     def __init__(self):
         options = webdriver.ChromeOptions()
@@ -63,7 +64,7 @@ class Whatsapp():
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-gpu")
         # options.add_argument("--no-sandbox") # linux only
-        options.add_argument("--headless=new") # for Chrome >= 109
+        # options.add_argument("--headless=new") # for Chrome >= 109
         options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36")
         # options.add_argument("--window-size=1920,1080")
         # options.add_argument('--headless')
@@ -72,7 +73,7 @@ class Whatsapp():
         self.browser = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options= options)
         self.browser.implicitly_wait(5)
         self.browser.get("https://web.whatsapp.com/")
-        self.loadCookie()
+        # self.loadCookie()
         self.event = threading.Event()
         k = ThreadJob(self.checkLogged,self.event,2)
         k.start()
@@ -82,7 +83,7 @@ class Whatsapp():
         try:
             self.qr_div = self.browser.find_element(By.XPATH, self.WHATSAPP_ELEMENTS_XPATH['QR'])
             qr_attr = self.qr_div.get_attribute('data-ref')
-            if (self.qr != qr_attr):
+            if (self.qr != qr_attr and self.QR_CHANGE_LISTENER):
                 self.QR_CHANGE_LISTENER(qr = qr_attr)
             self.qr = qr_attr
             if (self.isLogged == True): 
@@ -122,15 +123,12 @@ class Whatsapp():
             if (self.isLogged and len(self.msg_stack) > 0):
                 msg = self.msg_stack[0]
                 print(f'ACTION : SENDING MSG TO {msg.phone_no}')
-                self.search_bar.send_keys(msg.phone_no)
-                sleep(self.SLEEP_SECONDS['SENDER_SEARCH'])
-                senders = self.browser.find_elements(By.XPATH, self.WHATSAPP_ELEMENTS_XPATH['SENDER'])
-                if (len(senders) > 0):
-                    senders[0].click()
-                    sleep(self.SLEEP_SECONDS['SENDER_CLICK'])
-                    sender_msg_box = self.browser.find_element(By.XPATH, self.WHATSAPP_ELEMENTS_XPATH['SENDER_MSG_BOX'])
-                    sender_msg_box.send_keys(msg.message)
-                    self.browser.find_element(By.XPATH, self.WHATSAPP_ELEMENTS_XPATH['SEND_BTN']).click()
+                sender_url = self.WHATSAPP_SENDER_URL.replace('<phone-no>', msg.phone_no).replace('<msg>', msg.message)
+                self.browser.get(sender_url)
+                print('LOADED')
+                # actions = ActionChains(driver)
+                # actions.send_keys(Keys.ENTER)
+                # actions.perform()
                 self.msg_stack.pop(0)
                 print(f'ACTION : SENT MSG')
                 sleep(self.SLEEP_SECONDS['NEXT_ACTION'])
